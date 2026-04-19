@@ -1,3 +1,5 @@
+<!--include icons in the pages--> 
+
 <?php
 $conn = new mysqli("localhost", "root", "", "db_name");
 

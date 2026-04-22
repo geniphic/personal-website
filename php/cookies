@@ -1,0 +1,26 @@
+<?php
+$show_cookie_popup = !isset($_COOKIE['cookie_consent']);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cookies</title>
+    <link rel="stylesheet" href="cookies.css">
+</head>
+<script>
+document.getElementById("accept-cookies")?.addEventListener("click", function () {
+    document.cookie = "cookie_consent=yes; path=/; max-age=" + 60*60*24*365;
+    document.getElementById("cookie-popup").style.display = "none";
+});
+</script>
+
+<body>
+
+    <?php if ($show_cookie_popup): ?>
+    <div id="cookie-popup">
+        <p>We use cookies to improve your experience.</p>
+        <button id="accept-cookies">Accept</button>
+    </div>
+    <?php endif; ?>

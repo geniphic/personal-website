@@ -1,1 +1,276 @@
+  /*database table - SQL*/
+  CREATE TABLE orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_name VARCHAR(100) NOT NULL,
+    order_type VARCHAR(20) NOT NULL,      -- 'delivery' or 'collection'
+    order_status VARCHAR(50) NOT NULL,    -- 'Pending', 'Preparing', etc.
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+  /*checkout.php*/
+  <?php
+require 'config.php';
+
+$message = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $customer_name = $_POST['customer_name'];
+    $order_type = $_POST['order_type'];
+    $order_status = "Pending";
+
+    $sql = "INSERT INTO orders (customer_name, order_type, order_status)
+            VALUES (?, ?, ?)";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("sss", $customer_name, $order_type, $order_status);
+
+    if ($stmt->execute()) {
+        $order_id = $stmt->insert_id;
+        $message = "Order placed! Your Order ID is: " . $order_id;
+    } else {
+        $message = "Error placing order.";
+    }
+}
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Checkout</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2>Checkout</h2>
+
+<?php if ($message): ?>
+    <p class="message"><?php echo $message; ?></p>
+<?php endif; ?>
+
+<form method="POST">
+    <label>Customer Name:</label>
+    <input type="text" name="customer_name" required>
+
+    <h3>Choose how you want to receive your order</h3>
+    <label>
+        <input type="radio" name="order_type" value="delivery" required>
+        Delivery
+    </label>
+    <label>
+        <input type="radio" name="order_type" value="collection" required>
+        Collection
+    </label>
+
+    <button type="submit">Place Order</button>
+</form>
+
+<p><a href="track.php">Track an order</a></p>
+<p><a href="admin_orders.php">Admin: Manage orders</a></p>
+</body>
+</html>
+
+/*admin_orders.php*/
+<?php
+require 'config.php';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $order_id = $_POST['order_id'];
+    $order_status = $_POST['order_status'];
+
+    $sql = "UPDATE orders SET order_status = ? WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("si", $order_status, $order_id);
+    $stmt->execute();
+}
+
+$result = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Orders</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2>Admin – Manage Orders</h2>
+
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Customer</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Update</th>
+    </tr>
+    <?php while ($row = $result->fetch_assoc()): ?>
+        <tr>
+            <td><?php echo $row['id']; ?></td>
+            <td><?php echo htmlspecialchars($row['customer_name']); ?></td>
+            <td><?php echo $row['order_type']; ?></td>
+            <td><?php echo $row['order_status']; ?></td>
+            <td>
+                <form method="POST" class="inline-form">
+                    <input type="hidden" name="order_id" value="<?php echo $row['id']; ?>">
+                    <select name="order_status">
+                        <option value="Pending" <?php if ($row['order_status']=='Pending') echo 'selected'; ?>>Pending</option>
+                        <option value="Preparing" <?php if ($row['order_status']=='Preparing') echo 'selected'; ?>>Preparing</option>
+                        <option value="Ready for Collection" <?php if ($row['order_status']=='Ready for Collection') echo 'selected'; ?>>Ready for Collection</option>
+                        <option value="Out for Delivery" <?php if ($row['order_status']=='Out for Delivery') echo 'selected'; ?>>Out for Delivery</option>
+                        <option value="Completed" <?php if ($row['order_status']=='Completed') echo 'selected'; ?>>Completed</option>
+                    </select>
+                    <button type="submit">Save</button>
+                </form>
+            </td>
+        </tr>
+    <?php endwhile; ?>
+</table>
+
+<p><a href="checkout.php">Back to checkout</a></p>
+</body>
+</html>
+
+/*track.php*/
+<?php
+require 'config.php';
+
+$order = null;
+$error = "";
+$progress_percent = 0;
+
+if (isset($_GET['order_id'])) {
+    $order_id = $_GET['order_id'];
+
+    $sql = "SELECT * FROM orders WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $order_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        $order = $result->fetch_assoc();
+
+        $status = $order['order_status'];
+        $progress_map = [
+            "Pending" => 10,
+            "Preparing" => 40,
+            "Ready for Collection" => 70,
+            "Out for Delivery" => 70,
+            "Completed" => 100
+        ];
+        $progress_percent = isset($progress_map[$status]) ? $progress_map[$status] : 0;
+    } else {
+        $error = "Order not found.";
+    }
+}
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Track Order</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h2>Track Your Order</h2>
+
+<form method="GET">
+    <label>Enter your Order ID:</label>
+    <input type="number" name="order_id" required>
+    <button type="submit">Track</button>
+</form>
+
+<?php if ($error): ?>
+    <p class="error"><?php echo $error; ?></p>
+<?php endif; ?>
+
+<?php if ($order): ?>
+    <h3>Order ID: <?php echo $order['id']; ?></h3>
+    <p><strong>Name:</strong> <?php echo htmlspecialchars($order['customer_name']); ?></p>
+    <p><strong>Type:</strong> <?php echo $order['order_type']; ?></p>
+    <p><strong>Status:</strong> <?php echo $order['order_status']; ?></p>
+
+    <div class="progress">
+        <div class="progress-bar" style="width: <?php echo $progress_percent; ?>%;"></div>
+    </div>
+<?php endif; ?>
+
+<p><a href="checkout.php">Back to checkout</a></p>
+</body>
+</html>
+
+/*simple css*/
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 30px auto;
+    padding: 0 15px;
+}
+
+h2, h3 {
+    color: #333;
+}
+
+form {
+    margin: 15px 0;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+    padding: 8px;
+    margin: 5px 0 10px;
+    width: 100%;
+    max-width: 300px;
+}
+
+button {
+    padding: 8px 16px;
+    background: #4CAF50;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #45a049;
+}
+
+.message {
+    color: green;
+}
+
+.error {
+    color: red;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+table, th, td {
+    border: 1px solid #ddd;
+}
+
+th, td {
+    padding: 8px;
+    text-align: left;
+}
+
+.inline-form {
+    display: inline-block;
+}
+
+.progress {
+    width: 100%;
+    max-width: 400px;
+    background: #eee;
+    border-radius: 10px;
+    margin: 15px 0;
+}
+
+.progress-bar {
+    height: 18px;
+    background: #4CAF50;
+    border-radius: 10px;
+}
+
+
 
